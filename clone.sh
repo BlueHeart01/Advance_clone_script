@@ -8,43 +8,39 @@ echo ""
 
 # Function: clone repo with branch selection
 clone_repo_branch() {
+    REPO=$1
+    DEST=$2
 
-REPO=$1
-DEST=$2
+    echo ""
+    echo "Fetching branches from:"
+    echo "$REPO"
+    echo ""
 
-echo ""
-echo "Fetching branches from:"
-echo "$REPO"
-echo ""
+    branches=$(git ls-remote --heads "$REPO" | awk '{print $2}' | sed 's|refs/heads/||')
 
-branches=$(git ls-remote --heads $REPO | awk '{print $2}' | sed 's|refs/heads/||')
-
-select branch in $branches
-do
-if [ -n "$branch" ]; then
-echo ""
-echo "Cloning branch: $branch"
-git clone --depth=1 -b $branch $REPO $DEST
-break
-else
-echo "Invalid selection"
-fi
-done
+    select branch in $branches; do
+        if [ -n "$branch" ]; then
+            echo ""
+            echo "Cloning branch: $branch"
+            git clone --depth=1 -b "$branch" "$REPO" "$DEST"
+            break
+        else
+            echo "Invalid selection"
+        fi
+    done
 }
 
 # Function: clone repo normally
 clone_repo() {
+    REPO=$1
+    DEST=$2
 
-REPO=$1
-DEST=$2
-
-echo ""
-echo "Cloning $REPO"
-git clone --depth=1 $REPO $DEST
-
+    echo ""
+    echo "Cloning $REPO"
+    git clone --depth=1 "$REPO" "$DEST"
 }
 
-# Clone device tree (ask branch)
+# Clone device tree with branch selection
 clone_repo_branch https://github.com/BlueHeart01/device_xiaomi_redwood.git device/xiaomi/redwood
 
 echo ""
@@ -63,9 +59,8 @@ echo ""
 echo "All additional trees cloned successfully!"
 echo ""
 
-# ROM selection menu
+# ROM selection
 echo "Select ROM to configure:"
-echo ""
 echo "1) Infinity"
 echo "2) Avium"
 echo "3) Clover"
@@ -87,7 +82,7 @@ case "$ROM" in
 7) ROM="derpfest" ;;
 esac
 
-ROM=$(echo $ROM | tr '[:upper:]' '[:lower:]')
+ROM=$(echo "$ROM" | tr '[:upper:]' '[:lower:]')
 
 echo ""
 echo "You selected ROM: $ROM"
@@ -97,14 +92,13 @@ DEVICE=device/xiaomi/redwood
 ANDROID_PRODUCTS=$DEVICE/AndroidProducts.mk
 BOARD_CONFIG=$DEVICE/BoardConfig.mk
 LINEAGE_MK=$DEVICE/lineage_redwood.mk
+SYSTEM_PROP=$DEVICE/configs/props/system.prop
 
-# ROM specific configuration
+# ROM configuration
 case "$ROM" in
 
 infinity)
-
 PREFIX="infinity"
-
 FLAGS='
 INFINITY_BUILD_TYPE := OFFICIAL
 TARGET_BOOT_ANIMATION_RES := 1080
@@ -115,9 +109,7 @@ WITH_GAPPS := true
 ;;
 
 avium)
-
 PREFIX="avium"
-
 FLAGS='
 WITH_GMS := true
 TARGET_GMS_TYPE := FULL
@@ -131,9 +123,7 @@ AVIUM_VERSION_APPEND_TIME_OF_DAY := true
 ;;
 
 clover)
-
 PREFIX="clover"
-
 FLAGS='
 WITH_GMS := true
 TARGET_ENABLE_BLUR := true
@@ -143,9 +133,7 @@ CLOVER_MAINTAINER := BlueHeart016|Sᴀʏᴀɴシ
 ;;
 
 axion)
-
 PREFIX="lineage"
-
 FLAGS='
 WITH_GMS := true
 WITH_GAPPS := true
@@ -159,16 +147,12 @@ AXION_PROCESSOR := Snapdragon778G
 ;;
 
 pixelos)
-
 PREFIX="custom"
-
 FLAGS=''
 ;;
 
 euclid)
-
 PREFIX="euclid"
-
 FLAGS='
 WITH_GMS_COMMS_SUITE := true
 TARGET_INCLUDE_STOCK_ARCORE := true
@@ -183,21 +167,15 @@ EUCLID_PROCESSOR := Snapdragon_778G_5G
 ;;
 
 derpfest)
-
 PREFIX="lineage"
-
 FLAGS='
 DERPFEST_MAINTAINER := BlueHeart016|Sᴀʏᴀɴシ
-WITH_GMS := true
-WITH_GAPPS := true
 '
 ;;
 
 *)
-
 echo "Invalid ROM selected"
 exit 1
-
 ;;
 
 esac
@@ -207,27 +185,35 @@ echo "Applying ROM specific changes..."
 
 # Axion & Derpfest keep lineage base
 if [[ "$ROM" == "axion" || "$ROM" == "derpfest" ]]; then
-
-echo "This ROM uses Lineage base configuration."
-echo "Skipping lineage replacement."
-
+    echo "This ROM uses Lineage base configuration."
+    echo "Skipping lineage replacement."
 else
+    sed -i "s/lineage/$PREFIX/g" "$ANDROID_PRODUCTS"
+    sed -i "s/lineage/$PREFIX/g" "$BOARD_CONFIG"
+    sed -i "s/lineage/$PREFIX/g" "$LINEAGE_MK"
 
-sed -i "s/lineage/$PREFIX/g" $ANDROID_PRODUCTS
-sed -i "s/lineage/$PREFIX/g" $BOARD_CONFIG
-sed -i "s/lineage/$PREFIX/g" $LINEAGE_MK
-
-NEW_FILE=$DEVICE/${PREFIX}_redwood.mk
-mv $LINEAGE_MK $NEW_FILE
-
-echo "File renamed to: ${PREFIX}_redwood.mk"
-
-LINEAGE_MK=$NEW_FILE
-
+    NEW_FILE=$DEVICE/${PREFIX}_redwood.mk
+    mv "$LINEAGE_MK" "$NEW_FILE"
+    echo "File renamed to: ${PREFIX}_redwood.mk"
+    LINEAGE_MK=$NEW_FILE
 fi
 
-# Add flags
-echo "$FLAGS" >> $LINEAGE_MK
+# Add ROM flags
+echo "$FLAGS" >> "$LINEAGE_MK"
+
+# Infinity specific system.prop edit
+if [[ "$ROM" == "infinity" ]]; then
+    echo "Adding Infinity system properties..."
+
+    sed -i '/persist.vendor.cne.feature=1/a\
+\
+# Infinity\
+ro.product.marketname=Poco X5 Pro 5G\
+ro.infinity.soc=Snapdragon 778G 5G\
+ro.infinity.battery=5000 mAh\
+ro.infinity.display=1080 x 2400, 120 Hz\
+ro.infinity.camera=108MP + 8MP + 2MP' "$SYSTEM_PROP"
+fi
 
 echo ""
 echo "====================================="
