@@ -6,7 +6,8 @@ echo "  Welcome to BlueHeart Clone Script  "
 echo "====================================="
 echo ""
 
-clone_repo() {
+# Function: clone repo with branch selection
+clone_repo_branch() {
 
 REPO=$1
 DEST=$2
@@ -31,14 +32,38 @@ fi
 done
 }
 
-Clone device tree
+# Function: clone repo normally
+clone_repo() {
 
-clone_repo https://github.com/BlueHeart01/device_xiaomi_redwood.git device/xiaomi/redwood
+REPO=$1
+DEST=$2
+
+echo ""
+echo "Cloning $REPO"
+git clone --depth=1 $REPO $DEST
+
+}
+
+# Clone device tree (ask branch)
+clone_repo_branch https://github.com/BlueHeart01/device_xiaomi_redwood.git device/xiaomi/redwood
 
 echo ""
 echo "Device tree cloned successfully!"
 echo ""
 
+# Clone additional trees
+clone_repo https://github.com/BlueHeart01/vendor_xiaomi_redwood.git vendor/xiaomi/redwood
+clone_repo https://github.com/Redwood-AOSP/android_device_xiaomi_redwood-kernel.git device/xiaomi/redwood-kernel
+clone_repo https://github.com/BlueHeart01/redwood_vendor_xiaomi_redwood-miuicamera.git vendor/xiaomi/redwood-miuicamera
+clone_repo https://github.com/BlueHeart01/vendor_oneplus_dolby.git vendor/oneplus/dolby
+clone_repo https://github.com/BlueHeart01/hardware_xiaomi.git hardware/xiaomi
+clone_repo https://github.com/BlueHeart01/vendor_bcr.git vendor/bcr
+
+echo ""
+echo "All additional trees cloned successfully!"
+echo ""
+
+# ROM selection menu
 echo "Select ROM to configure:"
 echo ""
 echo "1) Infinity"
@@ -47,19 +72,20 @@ echo "3) Clover"
 echo "4) Axion"
 echo "5) PixelOS"
 echo "6) EuclidOS"
+echo "7) Derpfest"
 echo ""
 
 read -p "Enter ROM name or number: " ROM
 
 case "$ROM" in
-
 1) ROM="infinity" ;;
 2) ROM="avium" ;;
 3) ROM="clover" ;;
 4) ROM="axion" ;;
 5) ROM="pixelos" ;;
 6) ROM="euclid" ;;
-   esac
+7) ROM="derpfest" ;;
+esac
 
 ROM=$(echo $ROM | tr '[:upper:]' '[:lower:]')
 
@@ -72,6 +98,7 @@ ANDROID_PRODUCTS=$DEVICE/AndroidProducts.mk
 BOARD_CONFIG=$DEVICE/BoardConfig.mk
 LINEAGE_MK=$DEVICE/lineage_redwood.mk
 
+# ROM specific configuration
 case "$ROM" in
 
 infinity)
@@ -79,7 +106,6 @@ infinity)
 PREFIX="infinity"
 
 FLAGS='
-#Flags for Infinity
 INFINITY_BUILD_TYPE := OFFICIAL
 TARGET_BOOT_ANIMATION_RES := 1080
 TARGET_SUPPORTS_BLUR := true
@@ -93,7 +119,6 @@ avium)
 PREFIX="avium"
 
 FLAGS='
-#Flags for Avium
 WITH_GMS := true
 TARGET_GMS_TYPE := FULL
 TARGET_FORCE_ENABLE_BLUR := true
@@ -110,7 +135,6 @@ clover)
 PREFIX="clover"
 
 FLAGS='
-#Flags for Clover
 WITH_GMS := true
 TARGET_ENABLE_BLUR := true
 TARGET_INCLUDE_PIXEL_LAUNCHER := true
@@ -120,10 +144,9 @@ CLOVER_MAINTAINER := BlueHeart016|Sᴀʏᴀɴシ
 
 axion)
 
-PREFIX="axion"
+PREFIX="lineage"
 
 FLAGS='
-#Flags for Axion
 WITH_GMS := true
 WITH_GAPPS := true
 TARGET_INCLUDE_VIPERFX := true
@@ -132,11 +155,6 @@ AXION_CAMERA_REAR_INFO := 12,8,2
 AXION_CAMERA_FRONT_INFO := 16
 AXION_MAINTAINER := Sᴀʏᴀɴシ
 AXION_PROCESSOR := Snapdragon778G
-BYPASS_CHARGE_SUPPORTED := true
-TORCH_STR_SUPPORTED := true
-persist.sys.perf.scroll_opt = true
-persist.sys.perf.scroll_opt.heavy_app = 2
-TARGET_INCLUDES_LOS_PREBUILTS := true
 '
 ;;
 
@@ -144,9 +162,7 @@ pixelos)
 
 PREFIX="custom"
 
-FLAGS='
-#Flags for PixelOS
-'
+FLAGS=''
 ;;
 
 euclid)
@@ -154,7 +170,6 @@ euclid)
 PREFIX="euclid"
 
 FLAGS='
-#Euclid Flags
 WITH_GMS_COMMS_SUITE := true
 TARGET_INCLUDE_STOCK_ARCORE := true
 TARGET_INCLUDE_PIXEL_LAUNCHER := true
@@ -167,10 +182,22 @@ EUCLID_PROCESSOR := Snapdragon_778G_5G
 '
 ;;
 
+derpfest)
+
+PREFIX="lineage"
+
+FLAGS='
+DERPFEST_MAINTAINER := BlueHeart016|Sᴀʏᴀɴシ
+WITH_GMS := true
+WITH_GAPPS := true
+'
+;;
+
 *)
 
 echo "Invalid ROM selected"
 exit 1
+
 ;;
 
 esac
@@ -178,19 +205,31 @@ esac
 echo ""
 echo "Applying ROM specific changes..."
 
+# Axion & Derpfest keep lineage base
+if [[ "$ROM" == "axion" || "$ROM" == "derpfest" ]]; then
+
+echo "This ROM uses Lineage base configuration."
+echo "Skipping lineage replacement."
+
+else
+
 sed -i "s/lineage/$PREFIX/g" $ANDROID_PRODUCTS
 sed -i "s/lineage/$PREFIX/g" $BOARD_CONFIG
 sed -i "s/lineage/$PREFIX/g" $LINEAGE_MK
 
-echo "$FLAGS" >> $LINEAGE_MK
-
 NEW_FILE=$DEVICE/${PREFIX}_redwood.mk
 mv $LINEAGE_MK $NEW_FILE
 
-echo ""
 echo "File renamed to: ${PREFIX}_redwood.mk"
-echo ""
 
+LINEAGE_MK=$NEW_FILE
+
+fi
+
+# Add flags
+echo "$FLAGS" >> $LINEAGE_MK
+
+echo ""
 echo "====================================="
 echo "ROM specific changes completed!"
 echo "You can now proceed to build your ROM"
