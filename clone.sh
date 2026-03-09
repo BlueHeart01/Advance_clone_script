@@ -6,48 +6,55 @@ echo "  Welcome to BlueHeart Clone Script  "
 echo "====================================="
 echo ""
 
-# Function: clone repo with branch selection
+# ─── Colors ───────────────────────────────────────────────
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+# ─── Helper Functions ─────────────────────────────────────
+info()    { echo -e "${CYAN}[INFO]${NC} $1"; }
+success() { echo -e "${GREEN}[OK]${NC} $1"; }
+warn()    { echo -e "${YELLOW}[WARN]${NC} $1"; }
+error()   { echo -e "${RED}[ERROR]${NC} $1"; }
+
+# Clone with branch selection
 clone_repo_branch() {
-    REPO=$1
-    DEST=$2
+    local REPO=$1
+    local DEST=$2
 
     echo ""
-    echo "Fetching branches from:"
-    echo "$REPO"
+    info "Fetching branches from: $REPO"
     echo ""
 
     branches=$(git ls-remote --heads "$REPO" | awk '{print $2}' | sed 's|refs/heads/||')
 
     select branch in $branches; do
         if [ -n "$branch" ]; then
-            echo ""
-            echo "Cloning branch: $branch"
+            info "Cloning branch: $branch"
             git clone --depth=1 -b "$branch" "$REPO" "$DEST"
+            success "Cloned: $DEST"
             break
         else
-            echo "Invalid selection"
+            error "Invalid selection, try again."
         fi
     done
 }
 
-# Function: clone repo normally
+# Clone normally (default branch)
 clone_repo() {
-    REPO=$1
-    DEST=$2
-
-    echo ""
-    echo "Cloning $REPO"
+    local REPO=$1
+    local DEST=$2
+    info "Cloning $REPO → $DEST"
     git clone --depth=1 "$REPO" "$DEST"
+    success "Cloned: $DEST"
 }
 
-# Clone device tree with branch selection
+# ─── Clone Trees ──────────────────────────────────────────
 clone_repo_branch https://github.com/BlueHeart01/device_xiaomi_redwood.git device/xiaomi/redwood
 
-echo ""
-echo "Device tree cloned successfully!"
-echo ""
-
-# Clone additional trees
 clone_repo https://github.com/BlueHeart01/vendor_xiaomi_redwood.git vendor/xiaomi/redwood
 clone_repo https://github.com/Redwood-AOSP/android_device_xiaomi_redwood-kernel.git device/xiaomi/redwood-kernel
 clone_repo https://github.com/BlueHeart01/redwood_vendor_xiaomi_redwood-miuicamera.git vendor/xiaomi/redwood-miuicamera
@@ -56,45 +63,57 @@ clone_repo https://github.com/BlueHeart01/hardware_xiaomi.git hardware/xiaomi
 clone_repo https://github.com/BlueHeart01/vendor_bcr.git vendor/bcr
 
 echo ""
-echo "All additional trees cloned successfully!"
+success "All trees cloned successfully!"
 echo ""
 
-# ROM selection
-echo "Select ROM to configure:"
-echo "1) Infinity"
-echo "2) Avium"
-echo "3) Clover"
-echo "4) Axion"
-echo "5) PixelOS"
-echo "6) EuclidOS"
-echo "7) Derpfest"
+# ─── ROM Selection ────────────────────────────────────────
+echo -e "${BOLD}Select ROM to configure:${NC}"
 echo ""
+echo "  1) Infinity"
+echo "  2) Avium"
+echo "  3) Clover"
+echo "  4) Axion"
+echo "  5) PixelOS"
+echo "  6) EuclidOS"
+echo "  7) Derpfest"
+echo "  8) Other (unlisted ROM - enter name manually)"
+echo "  9) Custom (manually edit product mk file)"
+echo ""
+read -p "Enter ROM name or number: " ROM_INPUT
 
-read -p "Enter ROM name or number: " ROM
+# Normalize input
+ROM=$(echo "$ROM_INPUT" | tr '[:upper:]' '[:lower:]' | xargs)
 
 case "$ROM" in
-1) ROM="infinity" ;;
-2) ROM="avium" ;;
-3) ROM="clover" ;;
-4) ROM="axion" ;;
-5) ROM="pixelos" ;;
-6) ROM="euclid" ;;
-7) ROM="derpfest" ;;
+    1|infinity)   ROM="infinity" ;;
+    2|avium)      ROM="avium" ;;
+    3|clover)     ROM="clover" ;;
+    4|axion)      ROM="axion" ;;
+    5|pixelos)    ROM="pixelos" ;;
+    6|euclid*)    ROM="euclid" ;;
+    7|derpfest)   ROM="derpfest" ;;
+    8|other)
+        echo ""
+        read -p "Enter ROM name (e.g. spark, rising, voltage): " ROM
+        ROM=$(echo "$ROM" | tr '[:upper:]' '[:lower:]' | xargs)
+        ;;
+    9|custom|manual)
+        ROM="custom_manual"
+        ;;
 esac
 
-ROM=$(echo "$ROM" | tr '[:upper:]' '[:lower:]')
-
 echo ""
-echo "You selected ROM: $ROM"
+info "Selected ROM: $ROM"
 echo ""
 
+# ─── Paths ────────────────────────────────────────────────
 DEVICE=device/xiaomi/redwood
 ANDROID_PRODUCTS=$DEVICE/AndroidProducts.mk
 BOARD_CONFIG=$DEVICE/BoardConfig.mk
 LINEAGE_MK=$DEVICE/lineage_redwood.mk
 SYSTEM_PROP=$DEVICE/configs/props/system.prop
 
-# ROM configuration
+# ─── ROM Flags ────────────────────────────────────────────
 case "$ROM" in
 
 infinity)
@@ -139,10 +158,19 @@ WITH_GMS := true
 WITH_GAPPS := true
 TARGET_INCLUDE_VIPERFX := true
 TARGET_ENABLE_BLUR := true
+TARGET_INCLUDES_LOS_PREBUILTS := true
+
+# Camera information
 AXION_CAMERA_REAR_INFO := 12,8,2
 AXION_CAMERA_FRONT_INFO := 16
+
+# Maintainer & Device info
 AXION_MAINTAINER := Sᴀʏᴀɴシ
-AXION_PROCESSOR := Snapdragon778G
+AXION_PROCESSOR := Snapdragon_778G
+
+# Charging
+BYPASS_CHARGE_SUPPORTED := true
+TORCH_STR_SUPPORTED := true
 '
 ;;
 
@@ -173,20 +201,96 @@ DERPFEST_MAINTAINER := BlueHeart016|Sᴀʏᴀɴシ
 '
 ;;
 
+custom_manual)
+    echo ""
+    warn "Manual mode selected."
+    echo ""
+    read -p "Enter your product mk filename (e.g. lineage_redwood.mk / spark_redwood.mk): " MK_NAME
+    MK_TARGET=$DEVICE/$MK_NAME
+
+    if [ -f "$MK_TARGET" ]; then
+        echo ""
+        info "File found: $MK_TARGET"
+        echo ""
+        echo "  1) Open in nano"
+        echo "  2) Exit script and edit manually"
+        echo ""
+        read -p "Choose option: " EDIT_CHOICE
+        case "$EDIT_CHOICE" in
+            1)
+                nano "$MK_TARGET"
+                success "File edited successfully."
+                ;;
+            2)
+                echo ""
+                info "File location: $MK_TARGET"
+                success "Exiting. Edit the file manually and build when ready."
+                exit 0
+                ;;
+            *)
+                error "Invalid choice. Exiting."
+                exit 1
+                ;;
+        esac
+    else
+        echo ""
+        warn "File $MK_TARGET not found."
+        echo ""
+        echo "  1) Create and open in nano"
+        echo "  2) Exit script and create manually"
+        echo ""
+        read -p "Choose option: " CREATE_CHOICE
+        case "$CREATE_CHOICE" in
+            1)
+                touch "$MK_TARGET"
+                nano "$MK_TARGET"
+                success "File created and edited."
+                ;;
+            2)
+                echo ""
+                info "Expected location: $MK_TARGET"
+                success "Exiting. Create the file manually and build when ready."
+                exit 0
+                ;;
+            *)
+                error "Invalid choice. Exiting."
+                exit 1
+                ;;
+        esac
+    fi
+    echo ""
+    success "Manual edit done. Exiting."
+    exit 0
+    ;;
+
 *)
-echo "Invalid ROM selected"
-exit 1
-;;
+    # Unknown ROM - ask for prefix and flags manually
+    echo ""
+    warn "ROM '$ROM' is not in the preset list."
+    echo ""
+    read -p "Enter the product prefix for this ROM (e.g. spark, voltage, rising): " PREFIX
+    PREFIX=$(echo "$PREFIX" | tr '[:upper:]' '[:lower:]' | xargs)
+    echo ""
+    info "Enter custom flags one per line (e.g. WITH_GMS := true)."
+    info "Press Enter on an empty line when done."
+    echo ""
+    FLAGS=""
+    while IFS= read -r line; do
+        [[ -z "$line" ]] && break
+        FLAGS="$FLAGS
+$line"
+    done
+    ;;
 
 esac
 
+# ─── Apply ROM Changes ────────────────────────────────────
 echo ""
-echo "Applying ROM specific changes..."
+info "Applying ROM specific changes for: $ROM"
 
 # Axion & Derpfest keep lineage base
 if [[ "$ROM" == "axion" || "$ROM" == "derpfest" ]]; then
-    echo "This ROM uses Lineage base configuration."
-    echo "Skipping lineage replacement."
+    warn "This ROM uses Lineage base — skipping lineage prefix replacement."
 else
     sed -i "s/lineage/$PREFIX/g" "$ANDROID_PRODUCTS"
     sed -i "s/lineage/$PREFIX/g" "$BOARD_CONFIG"
@@ -194,17 +298,31 @@ else
 
     NEW_FILE=$DEVICE/${PREFIX}_redwood.mk
     mv "$LINEAGE_MK" "$NEW_FILE"
-    echo "File renamed to: ${PREFIX}_redwood.mk"
     LINEAGE_MK=$NEW_FILE
+    success "Renamed product mk to: ${PREFIX}_redwood.mk"
 fi
 
-# Add ROM flags
-echo "$FLAGS" >> "$LINEAGE_MK"
+# Append flags
+if [ -n "$FLAGS" ]; then
+    echo "$FLAGS" >> "$LINEAGE_MK"
+    success "Flags appended to: $LINEAGE_MK"
+fi
 
-# Infinity specific system.prop edit
+# ─── Axion system props ───────────────────────────────────
+if [[ "$ROM" == "axion" ]]; then
+    info "Adding Axion scroll optimizer system properties..."
+    cat >> "$SYSTEM_PROP" << 'EOF'
+
+# Axion - Scroll Optimizer
+persist.sys.perf.scroll_opt=true
+persist.sys.perf.scroll_opt.heavy_app=2
+EOF
+    success "Axion system props added."
+fi
+
+# ─── Infinity system props ────────────────────────────────
 if [[ "$ROM" == "infinity" ]]; then
-    echo "Adding Infinity system properties..."
-
+    info "Adding Infinity system properties..."
     sed -i '/persist.vendor.cne.feature=1/a\
 \
 # Infinity\
@@ -213,11 +331,12 @@ ro.infinity.soc=Snapdragon 778G 5G\
 ro.infinity.battery=5000 mAh\
 ro.infinity.display=1080 x 2400, 120 Hz\
 ro.infinity.camera=108MP + 8MP + 2MP' "$SYSTEM_PROP"
+    success "Infinity system props added."
 fi
 
 echo ""
-echo "====================================="
-echo "ROM specific changes completed!"
-echo "You can now proceed to build your ROM"
-echo "====================================="
+echo -e "${GREEN}=====================================${NC}"
+echo -e "${GREEN}  ROM configuration completed!       ${NC}"
+echo -e "${GREEN}  You can now proceed to build.      ${NC}"
+echo -e "${GREEN}=====================================${NC}"
 echo ""
