@@ -20,41 +20,61 @@ success() { echo -e "${GREEN}[OK]${NC} $1"; }
 warn()    { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error()   { echo -e "${RED}[ERROR]${NC} $1"; }
 
-# Clone with branch selection
+# Clone with branch selection (device tree only)
 clone_repo_branch() {
     local REPO=$1
     local DEST=$2
 
     echo ""
-    info "Fetching branches from: $REPO"
+    info "Fetching branches from device tree..."
     echo ""
 
-    branches=$(git ls-remote --heads "$REPO" | awk '{print $2}' | sed 's|refs/heads/||')
+    branches=($(git ls-remote --heads "$REPO" | awk '{print $2}' | sed 's|refs/heads/||'))
 
-    select branch in $branches; do
-        if [ -n "$branch" ]; then
-            info "Cloning branch: $branch"
-            git clone --depth=1 -b "$branch" "$REPO" "$DEST"
-            success "Cloned: $DEST"
-            break
-        else
-            error "Invalid selection, try again."
-        fi
+    echo "Available branches:"
+    echo "-------------------"
+    for i in "${!branches[@]}"; do
+        echo "  $((i+1))) ${branches[$i]}"
     done
+    echo ""
+
+    read -p "Select branch number: " selection
+
+    if ! [[ "$selection" =~ ^[0-9]+$ ]] || (( selection < 1 || selection > ${#branches[@]} )); then
+        error "Invalid selection!"
+        exit 1
+    fi
+
+    SELECTED_BRANCH="${branches[$((selection-1))]}"
+    echo ""
+    info "Selected branch: $SELECTED_BRANCH"
+}
+
+# Clone with specific branch
+clone_repo_with_branch() {
+    local REPO=$1
+    local DEST=$2
+    local BRANCH=$3
+    info "Cloning $(basename $REPO) → $DEST"
+    git clone --depth=1 -b "$BRANCH" "$REPO" "$DEST"
+    success "Cloned: $DEST"
 }
 
 # Clone normally (default branch)
 clone_repo() {
     local REPO=$1
     local DEST=$2
-    info "Cloning $REPO → $DEST"
+    info "Cloning $(basename $REPO) → $DEST"
     git clone --depth=1 "$REPO" "$DEST"
     success "Cloned: $DEST"
 }
 
-# ─── Clone Trees ──────────────────────────────────────────
-clone_repo_branch https://github.com/BlueHeart01/device_xiaomi_redwood.git device/xiaomi/redwood
+# ─── Pick branch from device tree ─────────────────────────
+DEVICE_REPO="https://github.com/BlueHeart01/device_xiaomi_redwood.git"
+clone_repo_branch "$DEVICE_REPO"
 
+# ─── Clone Trees ──────────────────────────────────────────
+clone_repo_with_branch "$DEVICE_REPO" device/xiaomi/redwood "$SELECTED_BRANCH"
 clone_repo https://github.com/BlueHeart01/vendor_xiaomi_redwood.git vendor/xiaomi/redwood
 clone_repo https://github.com/Redwood-AOSP/android_device_xiaomi_redwood-kernel.git device/xiaomi/redwood-kernel
 clone_repo https://github.com/BlueHeart01/redwood_vendor_xiaomi_redwood-miuicamera.git vendor/xiaomi/redwood-miuicamera
@@ -292,9 +312,9 @@ info "Applying ROM specific changes for: $ROM"
 if [[ "$ROM" == "axion" || "$ROM" == "derpfest" ]]; then
     warn "This ROM uses Lineage base — skipping lineage prefix replacement."
 else
-    sed -i "s/lineage/$PREFIX/g" "$ANDROID_PRODUCTS"
-    sed -i "s/lineage/$PREFIX/g" "$BOARD_CONFIG"
-    sed -i "s/lineage/$PREFIX/g" "$LINEAGE_MK"
+    sed -i "/device\/lineage\/sepolicy/!s/lineage/$PREFIX/g" "$ANDROID_PRODUCTS"
+    sed -i "/device\/lineage\/sepolicy/!s/lineage/$PREFIX/g" "$BOARD_CONFIG"
+    sed -i "/device\/lineage\/sepolicy/!s/lineage/$PREFIX/g" "$LINEAGE_MK"
 
     NEW_FILE=$DEVICE/${PREFIX}_redwood.mk
     mv "$LINEAGE_MK" "$NEW_FILE"
