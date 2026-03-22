@@ -78,7 +78,7 @@ clone_repo_with_branch "$DEVICE_REPO" device/xiaomi/redwood "$SELECTED_BRANCH"
 clone_repo https://github.com/BlueHeart01/vendor_xiaomi_redwood.git vendor/xiaomi/redwood
 clone_repo https://github.com/Redwood-AOSP/android_device_xiaomi_redwood-kernel.git device/xiaomi/redwood-kernel
 clone_repo https://github.com/BlueHeart01/redwood_vendor_xiaomi_redwood-miuicamera.git vendor/xiaomi/redwood-miuicamera
-clone_repo https://github.com/BlueHeart01/vendor_oneplus_dolby.git vendor/oneplus/dolby
+clone_repo https://github.com/BlueHeart01/vendor_sony_dolby.git vendor/sony/dolby
 clone_repo https://github.com/BlueHeart01/hardware_xiaomi.git hardware/xiaomi
 clone_repo https://github.com/BlueHeart01/vendor_bcr.git vendor/bcr
 
