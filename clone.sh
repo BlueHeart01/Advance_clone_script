@@ -97,8 +97,9 @@ echo "  4) Axion"
 echo "  5) PixelOS"
 echo "  6) EuclidOS"
 echo "  7) Derpfest"
-echo "  8) Other (unlisted ROM - enter name manually)"
-echo "  9) Custom (manually edit product mk file)"
+echo "  8) ASCP"
+echo "  9) Other (unlisted ROM - enter name manually)"
+echo " 10) Custom (manually edit product mk file)"
 echo ""
 read -p "Enter ROM name or number: " ROM_INPUT
 
@@ -113,12 +114,13 @@ case "$ROM" in
     5|pixelos)    ROM="pixelos" ;;
     6|euclid*)    ROM="euclid" ;;
     7|derpfest)   ROM="derpfest" ;;
-    8|other)
+    8|ascp)       ROM="ascp" ;;
+    9|other)
         echo ""
         read -p "Enter ROM name (e.g. spark, rising, voltage): " ROM
         ROM=$(echo "$ROM" | tr '[:upper:]' '[:lower:]' | xargs)
         ;;
-    9|custom|manual)
+    10|custom|manual)
         ROM="custom_manual"
         ;;
 esac
@@ -219,6 +221,25 @@ derpfest)
 PREFIX="lineage"
 FLAGS='
 DERPFEST_MAINTAINER := BlueHeart016|Sᴀʏᴀɴシ
+'
+;;
+
+ascp)
+PREFIX="custom"
+FLAGS='
+# ASCP flags
+WITH_GMS := true
+ASCP_MAINTAINER := BlueHeart016|Sᴀʏᴀɴシ
+WITH_BCR := true
+WITH_REVANCED := true
+ASCP_OFFICIAL := true
+
+# Device props
+TARGET_SUPPORTS_QUICK_TAP := true
+TARGET_FACE_UNLOCK_SUPPORTED := true
+TARGET_DISABLE_EPPE := true
+TARGET_SUPPORTS_NEXT_GEN_ASSISTANT := true
+TARGET_SUPPORTS_OMX_SERVICE := false
 '
 ;;
 
