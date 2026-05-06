@@ -56,7 +56,7 @@ clone_repo_with_branch() {
     local DEST=$2
     local BRANCH=$3
     info "Cloning $(basename $REPO) → $DEST"
-    git clone --depth=1 -b "$BRANCH" "$REPO" "$DEST"
+    git clone -b "$BRANCH" "$REPO" "$DEST"
     success "Cloned: $DEST"
 }
 
@@ -65,7 +65,7 @@ clone_repo() {
     local REPO=$1
     local DEST=$2
     info "Cloning $(basename $REPO) → $DEST"
-    git clone --depth=1 "$REPO" "$DEST"
+    git clone "$REPO" "$DEST"
     success "Cloned: $DEST"
 }
 
