@@ -20,13 +20,12 @@ success() { echo -e "${GREEN}[OK]${NC} $1"; }
 warn()    { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error()   { echo -e "${RED}[ERROR]${NC} $1"; }
 
-# Clone with branch selection (device tree only)
+# Clone with branch selection
 clone_repo_branch() {
     local REPO=$1
-    local DEST=$2
 
     echo ""
-    info "Fetching branches from device tree..."
+    info "Fetching branches from $(basename $REPO .git)..."
     echo ""
 
     branches=($(git ls-remote --heads "$REPO" | awk '{print $2}' | sed 's|refs/heads/||'))
@@ -55,7 +54,7 @@ clone_repo_with_branch() {
     local REPO=$1
     local DEST=$2
     local BRANCH=$3
-    info "Cloning $(basename $REPO) → $DEST"
+    info "Cloning $(basename $REPO .git) → $DEST"
     git clone -b "$BRANCH" "$REPO" "$DEST"
     success "Cloned: $DEST"
 }
@@ -64,30 +63,107 @@ clone_repo_with_branch() {
 clone_repo() {
     local REPO=$1
     local DEST=$2
-    info "Cloning $(basename $REPO) → $DEST"
+    info "Cloning $(basename $REPO .git) → $DEST"
     git clone "$REPO" "$DEST"
     success "Cloned: $DEST"
 }
 
-# ─── Pick branch from device tree ─────────────────────────
-DEVICE_REPO="https://github.com/BlueHeart01/android_device_xiaomi_redwood.git"
-clone_repo_branch "$DEVICE_REPO"
+# ─── Keys Repo (always cloned) ────────────────────────────
+echo ""
+info "Cloning keys repo..."
+mkdir -p vendor/lineage-priv
+clone_repo https://github.com/BlueHeart01/keys.git vendor/lineage-priv/keys
 
-# ─── Clone Trees ──────────────────────────────────────────
-clone_repo_with_branch "$DEVICE_REPO" device/xiaomi/redwood "$SELECTED_BRANCH"
-clone_repo https://github.com/BlueHeart01/android_vendor_xiaomi_redwood.git vendor/xiaomi/redwood
-clone_repo https://github.com/Redwood-AOSP/android_device_xiaomi_redwood-kernel.git device/xiaomi/redwood-kernel
+# ─── Tree Type Selection ──────────────────────────────────
+echo ""
+echo -e "${BOLD}Select device tree type:${NC}"
+echo ""
+echo "  1) Normal tree  (redwood only)"
+echo "  2) Common tree  (redwood + sm8350-common)"
+echo ""
+read -p "Enter choice [1/2]: " TREE_TYPE
+
+case "$TREE_TYPE" in
+    1|normal) TREE_TYPE="normal" ;;
+    2|common) TREE_TYPE="common" ;;
+    *)
+        error "Invalid selection! Defaulting to normal tree."
+        TREE_TYPE="normal"
+        ;;
+esac
+
+echo ""
+info "Selected tree type: $TREE_TYPE"
+echo ""
+
+# ─── Normal Tree ──────────────────────────────────────────
+if [[ "$TREE_TYPE" == "normal" ]]; then
+
+    DEVICE_REPO="https://github.com/BlueHeart01/android_device_xiaomi_redwood.git"
+
+    info "=== Branch selection for device_xiaomi_redwood ==="
+    clone_repo_branch "$DEVICE_REPO"
+    REDWOOD_BRANCH="$SELECTED_BRANCH"
+
+    echo ""
+    echo -e "${BOLD}Cloning normal trees...${NC}"
+    echo ""
+
+    clone_repo_with_branch "$DEVICE_REPO" device/xiaomi/redwood "$REDWOOD_BRANCH"
+    clone_repo https://github.com/BlueHeart01/android_vendor_xiaomi_redwood.git vendor/xiaomi/redwood
+
+# ─── Common Tree ──────────────────────────────────────────
+elif [[ "$TREE_TYPE" == "common" ]]; then
+
+    DEVICE_REPO="https://github.com/BlueHeart01/device_xiaomi_redwood.git"
+    COMMON_REPO="https://github.com/BlueHeart01/device_xiaomi_sm8350-common.git"
+
+    info "=== Branch selection for device_xiaomi_redwood ==="
+    clone_repo_branch "$DEVICE_REPO"
+    REDWOOD_BRANCH="$SELECTED_BRANCH"
+
+    info "=== Branch selection for device_xiaomi_sm8350-common ==="
+    clone_repo_branch "$COMMON_REPO"
+    COMMON_BRANCH="$SELECTED_BRANCH"
+
+    echo ""
+    echo -e "${BOLD}Cloning common trees...${NC}"
+    echo ""
+
+    clone_repo_with_branch "$DEVICE_REPO"  device/xiaomi/redwood        "$REDWOOD_BRANCH"
+    clone_repo_with_branch "$COMMON_REPO"  device/xiaomi/sm8350-common  "$COMMON_BRANCH"
+    clone_repo https://github.com/BlueHeart01/vendor_xiaomi_redwood.git               vendor/xiaomi/redwood
+    clone_repo https://github.com/BlueHeart01/vendor_xiaomi_redwood_sm8350-common.git vendor/xiaomi/sm8350-common
+
+fi
+
+# ─── Always Cloned Repos ──────────────────────────────────
+echo ""
+echo -e "${BOLD}Cloning remaining repositories...${NC}"
+echo ""
+
+clone_repo https://github.com/Redwood-AOSP/android_device_xiaomi_redwood-kernel.git    device/xiaomi/redwood-kernel
 clone_repo https://github.com/BlueHeart01/redwood_vendor_xiaomi_redwood-miuicamera.git vendor/xiaomi/redwood-miuicamera
-clone_repo https://github.com/BlueHeart01/hardware_dolby.git hardware/dolby
-clone_repo https://github.com/BlueHeart01/hardware_xiaomi.git hardware/xiaomi
-clone_repo https://github.com/BlueHeart01/vendor_bcr.git vendor/bcr
-clone_repo https://github.com/BlueHeart01/packages_apps_DolbyUI.git packages/apps/DolbyUI
+clone_repo https://github.com/BlueHeart01/hardware_dolby.git                           hardware/dolby
+clone_repo https://github.com/BlueHeart01/hardware_xiaomi.git                          hardware/xiaomi
+clone_repo https://github.com/BlueHeart01/vendor_bcr.git                               vendor/bcr
+clone_repo https://github.com/BlueHeart01/packages_apps_DolbyUI.git                   packages/apps/DolbyUI
 
 echo ""
 success "All trees cloned successfully!"
 echo ""
 
-# ─── ROM Selection ────────────────────────────────────────
+# ─── Skip ROM config for common tree ──────────────────────
+if [[ "$TREE_TYPE" == "common" ]]; then
+    echo -e "${GREEN}=====================================${NC}"
+    echo -e "${GREEN}  Common tree cloned successfully!   ${NC}"
+    echo -e "${GREEN}  You can now proceed to build.      ${NC}"
+    echo -e "${GREEN}=====================================${NC}"
+    echo ""
+    exit 0
+fi
+
+# ─── ROM Selection (Normal tree only) ─────────────────────
 echo -e "${BOLD}Select ROM to configure:${NC}"
 echo ""
 echo "  1) Infinity"
@@ -103,7 +179,6 @@ echo " 10) Custom (manually edit product mk file)"
 echo ""
 read -p "Enter ROM name or number: " ROM_INPUT
 
-# Normalize input
 ROM=$(echo "$ROM_INPUT" | tr '[:upper:]' '[:lower:]' | xargs)
 
 case "$ROM" in
@@ -259,20 +334,9 @@ custom_manual)
         echo ""
         read -p "Choose option: " EDIT_CHOICE
         case "$EDIT_CHOICE" in
-            1)
-                nano "$MK_TARGET"
-                success "File edited successfully."
-                ;;
-            2)
-                echo ""
-                info "File location: $MK_TARGET"
-                success "Exiting. Edit the file manually and build when ready."
-                exit 0
-                ;;
-            *)
-                error "Invalid choice. Exiting."
-                exit 1
-                ;;
+            1) nano "$MK_TARGET" ; success "File edited successfully." ;;
+            2) echo "" ; info "File location: $MK_TARGET" ; success "Exiting." ; exit 0 ;;
+            *) error "Invalid choice. Exiting." ; exit 1 ;;
         esac
     else
         echo ""
@@ -283,21 +347,9 @@ custom_manual)
         echo ""
         read -p "Choose option: " CREATE_CHOICE
         case "$CREATE_CHOICE" in
-            1)
-                touch "$MK_TARGET"
-                nano "$MK_TARGET"
-                success "File created and edited."
-                ;;
-            2)
-                echo ""
-                info "Expected location: $MK_TARGET"
-                success "Exiting. Create the file manually and build when ready."
-                exit 0
-                ;;
-            *)
-                error "Invalid choice. Exiting."
-                exit 1
-                ;;
+            1) touch "$MK_TARGET" ; nano "$MK_TARGET" ; success "File created and edited." ;;
+            2) echo "" ; info "Expected location: $MK_TARGET" ; success "Exiting." ; exit 0 ;;
+            *) error "Invalid choice. Exiting." ; exit 1 ;;
         esac
     fi
     echo ""
@@ -306,7 +358,6 @@ custom_manual)
     ;;
 
 *)
-    # Unknown ROM - ask for prefix and flags manually
     echo ""
     warn "ROM '$ROM' is not in the preset list."
     echo ""
@@ -330,7 +381,6 @@ esac
 echo ""
 info "Applying ROM specific changes for: $ROM"
 
-# Axion & Derpfest keep lineage base
 if [[ "$ROM" == "axion" || "$ROM" == "derpfest" ]]; then
     warn "This ROM uses Lineage base — skipping lineage prefix replacement."
 else
@@ -344,7 +394,6 @@ else
     success "Renamed product mk to: ${PREFIX}_redwood.mk"
 fi
 
-# Append flags
 if [ -n "$FLAGS" ]; then
     echo "$FLAGS" >> "$LINEAGE_MK"
     success "Flags appended to: $LINEAGE_MK"
