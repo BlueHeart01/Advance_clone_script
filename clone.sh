@@ -54,18 +54,34 @@ clone_repo_with_branch() {
     local REPO=$1
     local DEST=$2
     local BRANCH=$3
+    if [ -d "$DEST" ]; then
+        warn "Skipping $(basename $REPO .git) — $DEST already exists."
+        return
+    fi
     info "Cloning $(basename $REPO .git) → $DEST"
-    git clone -b "$BRANCH" "$REPO" "$DEST"
-    success "Cloned: $DEST"
+    if git clone -b "$BRANCH" "$REPO" "$DEST"; then
+        success "Cloned: $DEST"
+    else
+        error "Failed to clone: $DEST"
+        exit 1
+    fi
 }
 
 # Clone normally (default branch)
 clone_repo() {
     local REPO=$1
     local DEST=$2
+    if [ -d "$DEST" ]; then
+        warn "Skipping $(basename $REPO .git) — $DEST already exists."
+        return
+    fi
     info "Cloning $(basename $REPO .git) → $DEST"
-    git clone "$REPO" "$DEST"
-    success "Cloned: $DEST"
+    if git clone "$REPO" "$DEST"; then
+        success "Cloned: $DEST"
+    else
+        error "Failed to clone: $DEST"
+        exit 1
+    fi
 }
 
 # ─── Keys Repo (always cloned) ────────────────────────────
@@ -152,6 +168,23 @@ clone_repo https://github.com/BlueHeart01/packages_apps_DolbyUI.git             
 echo ""
 success "All trees cloned successfully!"
 echo ""
+
+# ─── ASCP branch: Replace vendor/gms immediately after cloning ────────────────
+if [[ "$REDWOOD_BRANCH" == "ascp" ]]; then
+    echo ""
+    info "ASCP branch detected — replacing vendor/gms with device-compatible version..."
+    if [ -d "vendor/gms" ]; then
+        warn "Removing existing vendor/gms..."
+        rm -rf vendor/gms
+        success "Removed vendor/gms"
+    fi
+    if git clone https://github.com/BlueHeart01/Ascp_vendor_gms.git vendor/gms; then
+        success "Cloned Ascp_vendor_gms → vendor/gms"
+    else
+        error "Failed to clone Ascp_vendor_gms!"
+        exit 1
+    fi
+fi
 
 # ─── Skip ROM config for common tree ──────────────────────
 if [[ "$TREE_TYPE" == "common" ]]; then
