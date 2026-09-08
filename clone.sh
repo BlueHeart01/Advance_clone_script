@@ -2,7 +2,7 @@
 
 echo ""
 echo "====================================="
-echo "  Welcome to BlueHeart Clone Script  "
+echo "  Welcome to BlueHeart Advance Clone Script  "
 echo "====================================="
 echo ""
 
@@ -254,7 +254,6 @@ PREFIX="lineage"
 FLAGS='
 WITH_GMS := true
 WITH_GAPPS := true
-TARGET_INCLUDE_VIPERFX := true
 TARGET_ENABLE_BLUR := true
 TARGET_INCLUDES_LOS_PREBUILTS := true
 
@@ -265,9 +264,6 @@ AXION_CAMERA_FRONT_INFO := 16
 # Maintainer & Device info
 AXION_MAINTAINER := Sᴀʏᴀɴシ
 AXION_PROCESSOR := Snapdragon_778G
-
-# Charging
-BYPASS_CHARGE_SUPPORTED := true
 TORCH_STR_SUPPORTED := true
 '
 ;;
