@@ -1,4 +1,4 @@
-#!/bin/bash
+\#!/bin/bash
 
 echo ""
 echo "====================================="
@@ -143,7 +143,7 @@ echo -e "${BOLD}Cloning remaining repositories...${NC}"
 echo ""
 
 clone_repo https://github.com/BlueHeart01/device_xiaomi_redwood-scarlet-kernel.git    device/xiaomi/redwood-kernel
-clone_repo https://github.com/BlueHeart01/redwood_vendor_xiaomi_redwood-miuicamera.git vendor/xiaomi/redwood-miuicamera
+clone_repo https://github.com/BlueHeart01/vendor_xiaomi_redwood-miuicamera.git vendor/xiaomi/redwood-miuicamera
 clone_repo https://github.com/BlueHeart01/hardware_dolby.git                           hardware/dolby
 clone_repo https://github.com/BlueHeart01/hardware_xiaomi.git                          hardware/xiaomi
 clone_repo https://github.com/BlueHeart01/vendor_bcr.git                               vendor/bcr
