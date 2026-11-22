@@ -26,6 +26,33 @@ EXTRA_REPOS=(
     "$GH/android_packages_apps_ViPER4AndroidFX.git|packages/apps/ViPER4AndroidFX"
 )
 
+# ─── Android 16 rollback ──────────────────────────────────────────
+# Offered after cloning ("Make tree A16?"). Choosing Yes will:
+#   • revert the A17 commits below in the device tree and camera repo
+#   • delete the vendor tree and re-clone it from $A16_VENDOR_BRANCH
+# Commits are always reverted newest first, whatever order they're listed in.
+A16_DEVICE_PATH="device/xiaomi/redwood"
+A16_DEVICE_REVERTS=(
+    bf1b647c41032bf2d3fa378d3fce298b3d96e8c7
+    36581bbb1551cc52d81233fa5fc37a384679efc9
+    d9edd86c478fc751e82cf21e2c8b454911af9843
+    cd7a9be50d7665000821d5c006999b2704469018
+)
+
+A16_CAMERA_PATH="vendor/xiaomi/redwood-miuicamera"
+A16_CAMERA_REVERTS=(
+    640ea9909561cc7e816ec68fb0eaa571f2f508a9
+)
+
+A16_VENDOR_PATH="vendor/xiaomi/redwood"      # re-cloned from $VENDOR_REPO
+A16_VENDOR_BRANCH="sixteen-qpr2"
+
+# ─── Pre-configured branches ──────────────────────────────────────
+# If the chosen device tree branch name contains one of these words
+# (case-insensitive), ROM selection and configuration are skipped,
+# because those branches are already set up for their ROM.
+PRECONFIGURED_KEYWORDS=(lunaris rising ascp)
+
 # ─── Paths ────────────────────────────────────────────────────────
 DEVICE=device/xiaomi/redwood
 ANDROID_PRODUCTS=$DEVICE/AndroidProducts.mk
@@ -389,6 +416,8 @@ $line"
 
 # ─── Steps ────────────────────────────────────────────────────────
 KEYS_NAME=""; KEYS_URL=""; KEYS_DEST=""
+REVERTED=0; REVERT_FAILED=0
+PRECONFIGURED_MATCH=""
 DEVICE_BRANCH=""
 ROM=""; ROM_LABEL=""
 
@@ -423,6 +452,18 @@ step_branch() {
     fi
     menu "Device tree branch (redwood)" "${branches[@]}"
     DEVICE_BRANCH="$MENU_VALUE"
+
+    local lower kw
+    lower=$(printf '%s' "$DEVICE_BRANCH" | tr '[:upper:]' '[:lower:]')
+    for kw in "${PRECONFIGURED_KEYWORDS[@]}"; do
+        if [[ "$lower" == *"$kw"* ]]; then
+            PRECONFIGURED_MATCH="$kw"
+            break
+        fi
+    done
+    if [[ -n "$PRECONFIGURED_MATCH" ]]; then
+        info "Branch is pre-configured for ${BOLD}$PRECONFIGURED_MATCH${NC} — ROM selection will be skipped"
+    fi
 }
 
 step_rom() {
@@ -433,6 +474,7 @@ step_rom() {
     )
     local -a ids=(infinity avium clover axion pixelos euclid derpfest ascp other custom_manual)
 
+    section "ROM selection"
     menu "ROM to configure" "${labels[@]}"
     ROM="${ids[MENU_INDEX]}"
     ROM_LABEL="${labels[MENU_INDEX]%%"$TAB"*}"
@@ -464,7 +506,9 @@ step_review() {
     row "Branch"  "$DEVICE_BRANCH"
     row "Trees"   "$DEVICE/, vendor/xiaomi/redwood"
     row "Extras"  "kernel, MIUI camera, hardware/xiaomi, BCR, ViPER4AndroidFX"
-    row "ROM"     "$ROM_LABEL"
+    if [[ -n "$PRECONFIGURED_MATCH" ]]; then
+        row "ROM"  "pre-configured ($PRECONFIGURED_MATCH) — selection skipped"
+    fi
 
     menu "Ready to clone?" "Yes, start cloning" "No, cancel"
     if (( MENU_INDEX != 0 )); then
@@ -488,6 +532,104 @@ step_clone() {
         ok "Cloned $CLONED repositories, skipped $SKIPPED"
     else
         ok "All $CLONED repositories cloned"
+    fi
+}
+
+# revert_commits DEST SHA...  — reverts the given commits, newest first
+revert_commits() {
+    local dest="$1"; shift
+    local sha full short subject line
+    local -a wanted=() ordered=() gitid=()
+
+    info "${BOLD}$dest${NC}"
+    if ! git -C "$dest" rev-parse --git-dir >/dev/null 2>&1; then
+        warn "  not a git repository — skipped"
+        return
+    fi
+
+    # git revert needs an identity to commit; borrow a throwaway one if unset
+    if [[ -z "$(git config user.name)" || -z "$(git config user.email)" ]]; then
+        gitid=(-c user.name="clone.sh" -c user.email="clone@localhost")
+    fi
+
+    # keep only commits that really are in this checkout's history
+    for sha in "$@"; do
+        short="${sha:0:9}"
+        if ! full=$(git -C "$dest" rev-parse --verify --quiet "$sha^{commit}"); then
+            warn "  $short not found — skipped"
+            continue
+        fi
+        if ! git -C "$dest" merge-base --is-ancestor "$full" HEAD; then
+            warn "  $short is not in this branch's history — skipped"
+            continue
+        fi
+        wanted+=("$full")
+    done
+    (( ${#wanted[@]} > 0 )) || return
+
+    # newest first, regardless of the order they were listed in
+    mapfile -t ordered < <(git -C "$dest" rev-list HEAD | grep -Fx -f <(printf '%s\n' "${wanted[@]}"))
+
+    for full in "${ordered[@]}"; do
+        short="${full:0:9}"
+        # Re-running on an existing checkout must not revert the revert
+        if [[ -n "$(git -C "$dest" log -n1 --format=%H --grep="This reverts commit $full" HEAD)" ]]; then
+            ok "  $short already reverted"
+            continue
+        fi
+
+        subject=$(git -C "$dest" log -n1 --format=%s "$full")
+        spin "Reverting $short in $dest" git "${gitid[@]}" -C "$dest" revert --no-edit "$full"
+        if (( SPIN_RC != 0 )); then
+            fail "  Could not revert ${BOLD}$short${NC} ${DIM}(${subject:0:50})${NC}"
+            while IFS= read -r line; do
+                printf '        %s%s%s\n' "$DIM" "$line" "$NC" >&2
+            done < <(grep -hE 'CONFLICT|error:' "$SPIN_OUT" "$SPIN_ERR" | head -n 4)
+            git -C "$dest" revert --abort >/dev/null 2>&1
+            REVERT_FAILED=$((REVERT_FAILED + 1))
+            warn "  Stopped $dest here — later commits may depend on this one"
+            return
+        fi
+        REVERTED=$((REVERTED + 1))
+        ok "  Reverted $short ${DIM}(${subject:0:50})${NC}"
+    done
+}
+
+step_a16() {
+    section "Android version"
+    row "Device"  "$A16_DEVICE_PATH  ·  revert ${#A16_DEVICE_REVERTS[@]} commits"
+    row "Camera"  "$A16_CAMERA_PATH  ·  revert ${#A16_CAMERA_REVERTS[@]} commit"
+    row "Vendor"  "$A16_VENDOR_PATH  ·  re-clone @ $A16_VENDOR_BRANCH"
+
+    menu "Make tree A16?" \
+        "Yes${TAB}apply the changes above" \
+        "Skip${TAB}keep the trees as cloned"
+    if (( MENU_INDEX != 0 )); then
+        info "Skipped — trees stay as cloned"
+        return 0
+    fi
+
+    # Check the vendor branch exists *before* deleting anything
+    spin "Checking branch $A16_VENDOR_BRANCH" git ls-remote --exit-code --heads "$VENDOR_REPO" "$A16_VENDOR_BRANCH"
+    if (( SPIN_RC != 0 )); then
+        fail "Branch '$A16_VENDOR_BRANCH' not found on $(basename "$VENDOR_REPO") — nothing was changed"
+        show_spin_error
+        return 0
+    fi
+
+    printf '\n'
+    revert_commits "$A16_DEVICE_PATH" "${A16_DEVICE_REVERTS[@]}"
+    revert_commits "$A16_CAMERA_PATH" "${A16_CAMERA_REVERTS[@]}"
+
+    info "${BOLD}$A16_VENDOR_PATH${NC}"
+    [[ -n "$A16_VENDOR_PATH" ]] && rm -rf -- "$A16_VENDOR_PATH"
+    clone "$VENDOR_REPO" "$A16_VENDOR_PATH" "$A16_VENDOR_BRANCH"
+
+    printf '\n'
+    if (( REVERT_FAILED > 0 )); then
+        warn "Reverted $REVERTED commits, $REVERT_FAILED failed — fix those repos manually"
+    else
+        ok "Tree is now A16  ${DIM}($REVERTED commits reverted, vendor on $A16_VENDOR_BRANCH)${NC}"
     fi
 }
 
@@ -571,8 +713,9 @@ ro.infinity.camera=108MP + 8MP + 2MP' "$SYSTEM_PROP"
 }
 
 finish() {
-    local elapsed=$((SECONDS - START_TIME))
-    box "$GREEN" "All done!" "ROM configuration completed" "You can now proceed to build." \
+    local elapsed=$((SECONDS - START_TIME)) status="ROM configuration completed"
+    [[ -n "$PRECONFIGURED_MATCH" ]] && status="Pre-configured branch - no ROM changes needed"
+    box "$GREEN" "All done!" "$status" "You can now proceed to build." \
         "Finished in $((elapsed / 60))m $((elapsed % 60))s"
     printf '\n'
 }
@@ -582,13 +725,19 @@ main() {
     banner
     step_keys
     step_branch
-    step_rom
     step_review
     step_clone
-    if [[ "$ROM" == "custom_manual" ]]; then
-        manual_edit
+    step_a16
+    if [[ -n "$PRECONFIGURED_MATCH" ]]; then
+        section "ROM selection"
+        info "Branch ${BOLD}$DEVICE_BRANCH${NC} is already configured — skipping ROM selection"
     else
-        apply_rom
+        step_rom
+        if [[ "$ROM" == "custom_manual" ]]; then
+            manual_edit
+        else
+            apply_rom
+        fi
     fi
     finish
 }
