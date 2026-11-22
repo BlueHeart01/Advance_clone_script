@@ -1,217 +1,275 @@
-\#!/bin/bash
+#!/usr/bin/env bash
+# ──────────────────────────────────────────────────────────────────
+#  BlueHeart Advance Clone Script
+#  Clones the redwood trees + extras and configures the product
+#  makefile for the ROM you pick. Run it from your ROM source root.
+# ──────────────────────────────────────────────────────────────────
 
-echo ""
-echo "====================================="
-echo "  Welcome to BlueHeart Advance Clone Script  "
-echo "====================================="
-echo ""
+set -o pipefail
+export GIT_TERMINAL_PROMPT=0   # never hang on a hidden credential prompt
 
-# ─── Colors ───────────────────────────────────────────────
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
-BOLD='\033[1m'
-NC='\033[0m'
+# ─── Repositories ─────────────────────────────────────────────────
+GH="https://github.com/BlueHeart01"
 
-# ─── Helper Functions ─────────────────────────────────────
-info()    { echo -e "${CYAN}[INFO]${NC} $1"; }
-success() { echo -e "${GREEN}[OK]${NC} $1"; }
-warn()    { echo -e "${YELLOW}[WARN]${NC} $1"; }
-error()   { echo -e "${RED}[ERROR]${NC} $1"; }
+KEYS_REPO="$GH/keys.git"
+POS_KEYS_REPO="$GH/POS-keys.git"
 
-# Clone with branch selection
-clone_repo_branch() {
-    local REPO=$1
+DEVICE_REPO="$GH/android_device_xiaomi_redwood.git"
+VENDOR_REPO="$GH/android_vendor_xiaomi_redwood.git"
 
-    echo ""
-    info "Fetching branches from $(basename $REPO .git)..."
-    echo ""
+# "repo url|destination"
+EXTRA_REPOS=(
+    "$GH/device_xiaomi_redwood-scarlet-kernel.git|device/xiaomi/redwood-kernel"
+    "$GH/vendor_xiaomi_redwood-miuicamera.git|vendor/xiaomi/redwood-miuicamera"
+    "$GH/android_hardware_xiaomi.git|hardware/xiaomi"
+    "$GH/vendor_bcr.git|vendor/bcr"
+    "$GH/android_packages_apps_ViPER4AndroidFX.git|packages/apps/ViPER4AndroidFX"
+)
 
-    branches=($(git ls-remote --heads "$REPO" | awk '{print $2}' | sed 's|refs/heads/||'))
-
-    echo "Available branches:"
-    echo "-------------------"
-    for i in "${!branches[@]}"; do
-        echo "  $((i+1))) ${branches[$i]}"
-    done
-    echo ""
-
-    read -p "Select branch number: " selection
-
-    if ! [[ "$selection" =~ ^[0-9]+$ ]] || (( selection < 1 || selection > ${#branches[@]} )); then
-        error "Invalid selection!"
-        exit 1
-    fi
-
-    SELECTED_BRANCH="${branches[$((selection-1))]}"
-    echo ""
-    info "Selected branch: $SELECTED_BRANCH"
-}
-
-# Clone with specific branch
-clone_repo_with_branch() {
-    local REPO=$1
-    local DEST=$2
-    local BRANCH=$3
-    info "Cloning $(basename $REPO .git) → $DEST"
-    git clone -b "$BRANCH" "$REPO" "$DEST"
-    success "Cloned: $DEST"
-}
-
-# Clone normally (default branch)
-clone_repo() {
-    local REPO=$1
-    local DEST=$2
-    info "Cloning $(basename $REPO .git) → $DEST"
-    git clone "$REPO" "$DEST"
-    success "Cloned: $DEST"
-}
-
-# ─── Keys Repo (always cloned) ────────────────────────────
-echo ""
-info "Cloning keys repo..."
-mkdir -p vendor/lineage-priv
-clone_repo https://github.com/BlueHeart01/keys.git vendor/lineage-priv/keys
-
-# ─── Tree Type Selection ──────────────────────────────────
-echo ""
-echo -e "${BOLD}Select device tree type:${NC}"
-echo ""
-echo "  1) Normal tree  (redwood only)"
-echo "  2) Common tree  (redwood + sm8350-common)"
-echo ""
-read -p "Enter choice [1/2]: " TREE_TYPE
-
-case "$TREE_TYPE" in
-    1|normal) TREE_TYPE="normal" ;;
-    2|common) TREE_TYPE="common" ;;
-    *)
-        error "Invalid selection! Defaulting to normal tree."
-        TREE_TYPE="normal"
-        ;;
-esac
-
-echo ""
-info "Selected tree type: $TREE_TYPE"
-echo ""
-
-# ─── Normal Tree ──────────────────────────────────────────
-if [[ "$TREE_TYPE" == "normal" ]]; then
-
-    DEVICE_REPO="https://github.com/BlueHeart01/android_device_xiaomi_redwood.git"
-
-    info "=== Branch selection for device_xiaomi_redwood ==="
-    clone_repo_branch "$DEVICE_REPO"
-    REDWOOD_BRANCH="$SELECTED_BRANCH"
-
-    echo ""
-    echo -e "${BOLD}Cloning normal trees...${NC}"
-    echo ""
-
-    clone_repo_with_branch "$DEVICE_REPO" device/xiaomi/redwood "$REDWOOD_BRANCH"
-    clone_repo https://github.com/BlueHeart01/android_vendor_xiaomi_redwood.git vendor/xiaomi/redwood
-
-# ─── Common Tree ──────────────────────────────────────────
-elif [[ "$TREE_TYPE" == "common" ]]; then
-
-    DEVICE_REPO="https://github.com/BlueHeart01/device_xiaomi_redwood.git"
-    COMMON_REPO="https://github.com/BlueHeart01/device_xiaomi_sm8350-common.git"
-
-    info "=== Branch selection for device_xiaomi_redwood ==="
-    clone_repo_branch "$DEVICE_REPO"
-    REDWOOD_BRANCH="$SELECTED_BRANCH"
-
-    info "=== Branch selection for device_xiaomi_sm8350-common ==="
-    clone_repo_branch "$COMMON_REPO"
-    COMMON_BRANCH="$SELECTED_BRANCH"
-
-    echo ""
-    echo -e "${BOLD}Cloning common trees...${NC}"
-    echo ""
-
-    clone_repo_with_branch "$DEVICE_REPO"  device/xiaomi/redwood        "$REDWOOD_BRANCH"
-    clone_repo_with_branch "$COMMON_REPO"  device/xiaomi/sm8350-common  "$COMMON_BRANCH"
-    clone_repo https://github.com/BlueHeart01/vendor_xiaomi_redwood.git               vendor/xiaomi/redwood
-    clone_repo https://github.com/BlueHeart01/vendor_xiaomi_redwood_sm8350-common.git vendor/xiaomi/sm8350-common
-
-fi
-
-# ─── Always Cloned Repos ──────────────────────────────────
-echo ""
-echo -e "${BOLD}Cloning remaining repositories...${NC}"
-echo ""
-
-clone_repo https://github.com/BlueHeart01/device_xiaomi_redwood-scarlet-kernel.git    device/xiaomi/redwood-kernel
-clone_repo https://github.com/BlueHeart01/vendor_xiaomi_redwood-miuicamera.git vendor/xiaomi/redwood-miuicamera
-clone_repo https://github.com/BlueHeart01/hardware_dolby.git                           hardware/dolby
-clone_repo https://github.com/BlueHeart01/hardware_xiaomi.git                          hardware/xiaomi
-clone_repo https://github.com/BlueHeart01/vendor_bcr.git                               vendor/bcr
-clone_repo https://github.com/BlueHeart01/packages_apps_DolbyUI.git                   packages/apps/DolbyUI
-
-echo ""
-success "All trees cloned successfully!"
-echo ""
-
-# ─── Skip ROM config for common tree ──────────────────────
-if [[ "$TREE_TYPE" == "common" ]]; then
-    echo -e "${GREEN}=====================================${NC}"
-    echo -e "${GREEN}  Common tree cloned successfully!   ${NC}"
-    echo -e "${GREEN}  You can now proceed to build.      ${NC}"
-    echo -e "${GREEN}=====================================${NC}"
-    echo ""
-    exit 0
-fi
-
-# ─── ROM Selection (Normal tree only) ─────────────────────
-echo -e "${BOLD}Select ROM to configure:${NC}"
-echo ""
-echo "  1) Infinity"
-echo "  2) Avium"
-echo "  3) Clover"
-echo "  4) Axion"
-echo "  5) PixelOS"
-echo "  6) EuclidOS"
-echo "  7) Derpfest"
-echo "  8) ASCP"
-echo "  9) Other (unlisted ROM - enter name manually)"
-echo " 10) Custom (manually edit product mk file)"
-echo ""
-read -p "Enter ROM name or number: " ROM_INPUT
-
-ROM=$(echo "$ROM_INPUT" | tr '[:upper:]' '[:lower:]' | xargs)
-
-case "$ROM" in
-    1|infinity)   ROM="infinity" ;;
-    2|avium)      ROM="avium" ;;
-    3|clover)     ROM="clover" ;;
-    4|axion)      ROM="axion" ;;
-    5|pixelos)    ROM="pixelos" ;;
-    6|euclid*)    ROM="euclid" ;;
-    7|derpfest)   ROM="derpfest" ;;
-    8|ascp)       ROM="ascp" ;;
-    9|other)
-        echo ""
-        read -p "Enter ROM name (e.g. spark, rising, voltage): " ROM
-        ROM=$(echo "$ROM" | tr '[:upper:]' '[:lower:]' | xargs)
-        ;;
-    10|custom|manual)
-        ROM="custom_manual"
-        ;;
-esac
-
-echo ""
-info "Selected ROM: $ROM"
-echo ""
-
-# ─── Paths ────────────────────────────────────────────────
+# ─── Paths ────────────────────────────────────────────────────────
 DEVICE=device/xiaomi/redwood
 ANDROID_PRODUCTS=$DEVICE/AndroidProducts.mk
 BOARD_CONFIG=$DEVICE/BoardConfig.mk
 LINEAGE_MK=$DEVICE/lineage_redwood.mk
 SYSTEM_PROP=$DEVICE/configs/props/system.prop
 
-# ─── ROM Flags ────────────────────────────────────────────
+# ─── Terminal styling ─────────────────────────────────────────────
+if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+    RED=$'\033[31m';    GREEN=$'\033[32m';  YELLOW=$'\033[33m'
+    BLUE=$'\033[34m';   MAGENTA=$'\033[35m'; CYAN=$'\033[36m'
+    BOLD=$'\033[1m';    DIM=$'\033[2m';     NC=$'\033[0m'
+else
+    RED=; GREEN=; YELLOW=; BLUE=; MAGENTA=; CYAN=; BOLD=; DIM=; NC=
+fi
+
+TAB=$'\t'
+BOX_W=54
+printf -v RULE '%*s' "$BOX_W" ''
+RULE=${RULE// /─}
+
+START_TIME=$SECONDS
+WORK_TMP=""
+
+info() { printf '  %s●%s %s\n' "$CYAN" "$NC" "$*"; }
+ok()   { printf '  %s✔%s %s\n' "$GREEN" "$NC" "$*"; }
+warn() { printf '  %s▲%s %s\n' "$YELLOW" "$NC" "$*"; }
+fail() { printf '  %s✘%s %s\n' "$RED" "$NC" "$*" >&2; }
+
+row() { printf '  %s%-10s%s %s\n' "$DIM" "$1" "$NC" "$2"; }
+
+section() {
+    printf '\n  %s%s◆ %s%s\n  %s%s%s\n' "$BOLD" "$CYAN" "$1" "$NC" "$DIM" "$RULE" "$NC"
+}
+
+center() {
+    local text="$1" w="$2" l r
+    l=$(( (w - ${#text}) / 2 ))
+    r=$(( w - ${#text} - l ))
+    printf '%*s%s%*s' "$l" '' "$text" "$r" ''
+}
+
+# box COLOR line1 [line2 ...]  — first line bold, the rest dim
+box() {
+    local color="$1" t i=0 style; shift
+    printf '\n  %s╭%s╮%s\n' "$color" "$RULE" "$NC"
+    for t in "$@"; do
+        if (( i == 0 )); then style=$BOLD; else style=$DIM; fi
+        printf '  %s│%s%s%s%s%s│%s\n' "$color" "$NC" "$style" "$(center "$t" "$BOX_W")" "$NC" "$color" "$NC"
+        i=$((i + 1))
+    done
+    printf '  %s╰%s╯%s\n' "$color" "$RULE" "$NC"
+}
+
+cleanup() {
+    [[ -t 1 ]] && printf '\033[?25h'
+    [[ -t 0 ]] && stty echo 2>/dev/null
+    local pids; pids=$(jobs -p)
+    [[ -n "$pids" ]] && kill $pids 2>/dev/null
+    [[ -n "$WORK_TMP" ]] && rm -rf "$WORK_TMP"
+}
+trap cleanup EXIT
+trap 'printf "\n"; fail "Cancelled."; exit 130' INT TERM
+
+# ─── Spinner ──────────────────────────────────────────────────────
+# spin "message" command args...
+# Runs the command quietly; sets SPIN_RC, SPIN_SECS, SPIN_OUT, SPIN_ERR.
+SPIN_RC=0; SPIN_SECS=0; SPIN_OUT=""; SPIN_ERR=""
+spin() {
+    local msg="$1"; shift
+    local frames=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏) i=0 start=$SECONDS pid
+    SPIN_OUT="$WORK_TMP/out"
+    SPIN_ERR="$WORK_TMP/err"
+
+    "$@" >"$SPIN_OUT" 2>"$SPIN_ERR" </dev/null &
+    pid=$!
+
+    if [[ -t 1 ]]; then
+        printf '\033[?25l'
+        while kill -0 "$pid" 2>/dev/null; do
+            printf '\r\033[K  %s%s%s %s %s(%ss)%s' \
+                "$CYAN" "${frames[i]}" "$NC" "$msg" "$DIM" "$((SECONDS - start))" "$NC"
+            i=$(( (i + 1) % ${#frames[@]} ))
+            sleep 0.08
+        done
+        printf '\r\033[K\033[?25h'
+    else
+        printf '  ... %s\n' "$msg"
+    fi
+
+    wait "$pid"
+    SPIN_RC=$?
+    SPIN_SECS=$((SECONDS - start))
+}
+
+show_spin_error() {
+    local l
+    while IFS= read -r l; do
+        printf '      %s%s%s\n' "$DIM" "$l" "$NC" >&2
+    done < <(tail -n 5 "$SPIN_ERR")
+    if grep -qiE 'terminal prompts disabled|authentication failed|could not read username' "$SPIN_ERR"; then
+        warn "This repo needs authentication — set up a credential helper (e.g. 'gh auth login') or use SSH."
+    fi
+}
+
+# ─── Interactive prompts ──────────────────────────────────────────
+MENU_INDEX=0
+MENU_VALUE=""
+MENU_VISIBLE=10
+
+# menu "Title" "label[<TAB>hint]" ...   → sets MENU_INDEX / MENU_VALUE
+menu() {
+    local title="$1"; shift
+    local -a labels=() hints=()
+    local item
+    for item in "$@"; do
+        labels+=("${item%%"$TAB"*}")
+        if [[ "$item" == *"$TAB"* ]]; then hints+=("${item#*"$TAB"}"); else hints+=(""); fi
+    done
+
+    local n=${#labels[@]} sel=0 top=0 view=$MENU_VISIBLE width=0 first=1 i idx key rest ans
+    (( n < view )) && view=$n
+    for item in "${labels[@]}"; do (( ${#item} > width )) && width=${#item}; done
+
+    printf '\n  %s?%s %s%s%s\n' "$MAGENTA" "$NC" "$BOLD" "$title" "$NC"
+
+    # Plain numbered fallback when not attached to a terminal
+    if [[ ! -t 0 || ! -t 1 ]]; then
+        for i in "${!labels[@]}"; do printf '    %2d) %s\n' $((i + 1)) "${labels[i]}"; done
+        while true; do
+            IFS= read -r -p "  Choose [1-$n]: " ans || exit 1
+            if [[ "$ans" =~ ^[0-9]+$ ]] && (( ans >= 1 && ans <= n )); then break; fi
+            warn "Invalid selection"
+        done
+        MENU_INDEX=$((ans - 1))
+        MENU_VALUE="${labels[MENU_INDEX]}"
+        return
+    fi
+
+    printf '\033[?25l'
+    while true; do
+        (( first )) || printf '\033[%dA' $((view + 1))
+        first=0
+
+        for (( i = 0; i < view; i++ )); do
+            idx=$((top + i))
+            printf '\r\033[K'
+            if (( idx == sel )); then
+                printf '  %s❯ %-*s%s' "$CYAN$BOLD" "$width" "${labels[idx]}" "$NC"
+            else
+                printf '    %-*s' "$width" "${labels[idx]}"
+            fi
+            [[ -n "${hints[idx]}" ]] && printf '  %s%s%s' "$DIM" "${hints[idx]}" "$NC"
+            printf '\n'
+        done
+        printf '\r\033[K  %s↑↓ move · enter select' "$DIM"
+        (( n > view )) && printf ' · %d/%d' $((sel + 1)) "$n"
+        printf '%s\n' "$NC"
+
+        IFS= read -rsn1 key || { printf '\033[?25h'; exit 1; }
+        if [[ "$key" == $'\033' ]]; then
+            IFS= read -rsn2 -t 0.05 rest
+            key+="$rest"
+        fi
+        case "$key" in
+            $'\033[A'|$'\033OA'|k) sel=$(( (sel - 1 + n) % n )) ;;
+            $'\033[B'|$'\033OB'|j) sel=$(( (sel + 1) % n )) ;;
+            [1-9]) (( key <= n )) && sel=$((key - 1)) ;;
+            '') break ;;
+        esac
+
+        if (( sel < top )); then
+            top=$sel
+        elif (( sel >= top + view )); then
+            top=$((sel - view + 1))
+        fi
+    done
+
+    MENU_INDEX=$sel
+    MENU_VALUE="${labels[sel]}"
+
+    # Collapse the menu into a single result line
+    printf '\033[%dA\033[J\033[?25h' $((view + 2))
+    printf '  %s✔%s %s %s›%s %s%s%s\n' "$GREEN" "$NC" "$title" "$DIM" "$NC" "$BOLD" "$MENU_VALUE" "$NC"
+}
+
+# ask "Prompt" [default]   → sets ASK_REPLY (value is required)
+ASK_REPLY=""
+ask() {
+    local prompt="$1" default="${2:-}" reply
+    while true; do
+        printf '\n  %s?%s %s%s%s' "$MAGENTA" "$NC" "$BOLD" "$prompt" "$NC"
+        [[ -n "$default" ]] && printf ' %s(%s)%s' "$DIM" "$default" "$NC"
+        printf ' %s›%s ' "$CYAN" "$NC"
+        IFS= read -r reply || exit 1
+        reply="${reply:-$default}"
+        [[ -n "$reply" ]] && break
+        warn "A value is required"
+    done
+    ASK_REPLY="$reply"
+}
+
+# ─── Cloning ──────────────────────────────────────────────────────
+CLONED=0
+SKIPPED=0
+
+# clone URL DEST [BRANCH]
+clone() {
+    local url="$1" dest="$2" branch="${3:-}" name
+    name=$(basename "$url" .git)
+
+    if [[ -d "$dest" && -n "$(ls -A "$dest" 2>/dev/null)" ]]; then
+        warn "${BOLD}$dest${NC} already exists and is not empty"
+        menu "What should I do with it?" \
+            "Skip${TAB}keep what's already there" \
+            "Re-clone${TAB}delete $dest and clone again" \
+            "Abort"
+        case $MENU_INDEX in
+            0) SKIPPED=$((SKIPPED + 1)); return 0 ;;
+            1) rm -rf -- "$dest" ;;
+            *) fail "Aborted."; exit 1 ;;
+        esac
+    fi
+
+    mkdir -p "$(dirname "$dest")"
+    local -a args=(clone)
+    [[ -n "$branch" ]] && args+=(-b "$branch")
+
+    spin "Cloning $name → $dest" git "${args[@]}" "$url" "$dest"
+    if (( SPIN_RC != 0 )); then
+        fail "Failed to clone ${BOLD}$name${NC}"
+        show_spin_error
+        exit 1
+    fi
+
+    CLONED=$((CLONED + 1))
+    ok "$name ${DIM}→ $dest (${SPIN_SECS}s)${NC}"
+}
+
+# ─── ROM presets ──────────────────────────────────────────────────
+PREFIX=""
+FLAGS=""
+
+rom_preset() {
 case "$ROM" in
 
 infinity)
@@ -314,103 +372,190 @@ TARGET_SUPPORTS_OMX_SERVICE := false
 '
 ;;
 
-custom_manual)
-    echo ""
-    warn "Manual mode selected."
-    echo ""
-    read -p "Enter your product mk filename (e.g. lineage_redwood.mk / spark_redwood.mk): " MK_NAME
-    MK_TARGET=$DEVICE/$MK_NAME
+esac
+}
 
-    if [ -f "$MK_TARGET" ]; then
-        echo ""
-        info "File found: $MK_TARGET"
-        echo ""
-        echo "  1) Open in nano"
-        echo "  2) Exit script and edit manually"
-        echo ""
-        read -p "Choose option: " EDIT_CHOICE
-        case "$EDIT_CHOICE" in
-            1) nano "$MK_TARGET" ; success "File edited successfully." ;;
-            2) echo "" ; info "File location: $MK_TARGET" ; success "Exiting." ; exit 0 ;;
-            *) error "Invalid choice. Exiting." ; exit 1 ;;
-        esac
-    else
-        echo ""
-        warn "File $MK_TARGET not found."
-        echo ""
-        echo "  1) Create and open in nano"
-        echo "  2) Exit script and create manually"
-        echo ""
-        read -p "Choose option: " CREATE_CHOICE
-        case "$CREATE_CHOICE" in
-            1) touch "$MK_TARGET" ; nano "$MK_TARGET" ; success "File created and edited." ;;
-            2) echo "" ; info "Expected location: $MK_TARGET" ; success "Exiting." ; exit 0 ;;
-            *) error "Invalid choice. Exiting." ; exit 1 ;;
-        esac
-    fi
-    echo ""
-    success "Manual edit done. Exiting."
-    exit 0
-    ;;
-
-*)
-    echo ""
-    warn "ROM '$ROM' is not in the preset list."
-    echo ""
-    read -p "Enter the product prefix for this ROM (e.g. spark, voltage, rising): " PREFIX
-    PREFIX=$(echo "$PREFIX" | tr '[:upper:]' '[:lower:]' | xargs)
-    echo ""
-    info "Enter custom flags one per line (e.g. WITH_GMS := true)."
-    info "Press Enter on an empty line when done."
-    echo ""
+collect_custom_flags() {
+    info "Enter custom flags, one per line (e.g. WITH_GMS := true)"
+    printf '  %sPress Enter on an empty line when done.%s\n' "$DIM" "$NC"
     FLAGS=""
-    while IFS= read -r line; do
+    local line
+    while IFS= read -r -p "    + " line; do
         [[ -z "$line" ]] && break
         FLAGS="$FLAGS
 $line"
     done
-    ;;
+}
 
-esac
+# ─── Steps ────────────────────────────────────────────────────────
+KEYS_NAME=""; KEYS_URL=""; KEYS_DEST=""
+DEVICE_BRANCH=""
+ROM=""; ROM_LABEL=""
 
-# ─── Apply ROM Changes ────────────────────────────────────
-echo ""
-info "Applying ROM specific changes for: $ROM"
+banner() {
+    box "$CYAN" "BlueHeart Advance Clone Script" "Xiaomi redwood - tree & ROM setup"
+    printf '  %sWorking in %s%s\n' "$DIM" "$PWD" "$NC"
+}
 
-if [[ "$ROM" == "axion" || "$ROM" == "derpfest" ]]; then
-    warn "This ROM uses Lineage base — skipping lineage prefix replacement."
-else
-    sed -i "/device\/lineage\/sepolicy/!s/lineage/$PREFIX/g" "$ANDROID_PRODUCTS"
-    sed -i "/device\/lineage\/sepolicy/!s/lineage/$PREFIX/g" "$BOARD_CONFIG"
-    sed -i "/device\/lineage\/sepolicy/!s/lineage/$PREFIX/g" "$LINEAGE_MK"
+step_keys() {
+    section "Setup"
+    menu "Signing keys" \
+        "Default keys${TAB}BlueHeart01/keys  →  vendor/lineage-priv/keys" \
+        "POS keys${TAB}BlueHeart01/POS-keys  →  vendor/lineage-priv"
+    case $MENU_INDEX in
+        0) KEYS_NAME="Default keys"; KEYS_URL="$KEYS_REPO";     KEYS_DEST="vendor/lineage-priv/keys" ;;
+        1) KEYS_NAME="POS keys";     KEYS_URL="$POS_KEYS_REPO"; KEYS_DEST="vendor/lineage-priv" ;;
+    esac
+}
 
-    NEW_FILE=$DEVICE/${PREFIX}_redwood.mk
-    mv "$LINEAGE_MK" "$NEW_FILE"
-    LINEAGE_MK=$NEW_FILE
-    success "Renamed product mk to: ${PREFIX}_redwood.mk"
-fi
+step_branch() {
+    local -a branches=()
+    spin "Fetching branches from $(basename "$DEVICE_REPO" .git)" git ls-remote --heads "$DEVICE_REPO"
+    if (( SPIN_RC != 0 )); then
+        fail "Could not fetch branches"
+        show_spin_error
+        exit 1
+    fi
+    mapfile -t branches < <(awk '{sub(/^refs\/heads\//, "", $2); print $2}' "$SPIN_OUT")
+    if (( ${#branches[@]} == 0 )); then
+        fail "No branches found in $DEVICE_REPO"
+        exit 1
+    fi
+    menu "Device tree branch (redwood)" "${branches[@]}"
+    DEVICE_BRANCH="$MENU_VALUE"
+}
 
-if [ -n "$FLAGS" ]; then
-    echo "$FLAGS" >> "$LINEAGE_MK"
-    success "Flags appended to: $LINEAGE_MK"
-fi
+step_rom() {
+    local -a labels=(
+        "Infinity" "Avium" "Clover" "Axion" "PixelOS" "EuclidOS" "Derpfest" "ASCP"
+        "Other${TAB}unlisted ROM, enter prefix & flags"
+        "Custom${TAB}edit the product mk file yourself"
+    )
+    local -a ids=(infinity avium clover axion pixelos euclid derpfest ascp other custom_manual)
 
-# ─── Axion system props ───────────────────────────────────
-if [[ "$ROM" == "axion" ]]; then
-    info "Adding Axion scroll optimizer system properties..."
-    cat >> "$SYSTEM_PROP" << 'EOF'
+    menu "ROM to configure" "${labels[@]}"
+    ROM="${ids[MENU_INDEX]}"
+    ROM_LABEL="${labels[MENU_INDEX]%%"$TAB"*}"
+
+    case "$ROM" in
+        other)
+            ask "ROM name (e.g. spark, rising, voltage)"
+            ROM=$(printf '%s' "$ASK_REPLY" | tr '[:upper:]' '[:lower:]')
+            ROM=${ROM//[[:space:]]/}
+            ROM_LABEL="$ROM"
+            warn "'$ROM' is not in the preset list"
+            ask "Product prefix for this ROM" "$ROM"
+            PREFIX=$(printf '%s' "$ASK_REPLY" | tr '[:upper:]' '[:lower:]')
+            PREFIX=${PREFIX//[[:space:]]/}
+            collect_custom_flags
+            ;;
+        custom_manual)
+            ROM_LABEL="Custom (manual edit)"
+            ;;
+        *)
+            rom_preset
+            ;;
+    esac
+}
+
+step_review() {
+    section "Review"
+    row "Keys"    "$KEYS_NAME  →  $KEYS_DEST"
+    row "Branch"  "$DEVICE_BRANCH"
+    row "Trees"   "$DEVICE/, vendor/xiaomi/redwood"
+    row "Extras"  "kernel, MIUI camera, hardware/xiaomi, BCR, ViPER4AndroidFX"
+    row "ROM"     "$ROM_LABEL"
+
+    menu "Ready to clone?" "Yes, start cloning" "No, cancel"
+    if (( MENU_INDEX != 0 )); then
+        info "Nothing was cloned. Bye!"
+        exit 0
+    fi
+}
+
+step_clone() {
+    local entry
+    section "Cloning"
+    clone "$KEYS_URL"    "$KEYS_DEST"
+    clone "$DEVICE_REPO" "$DEVICE" "$DEVICE_BRANCH"
+    clone "$VENDOR_REPO" vendor/xiaomi/redwood
+    for entry in "${EXTRA_REPOS[@]}"; do
+        clone "${entry%%|*}" "${entry#*|}"
+    done
+
+    printf '\n'
+    if (( SKIPPED > 0 )); then
+        ok "Cloned $CLONED repositories, skipped $SKIPPED"
+    else
+        ok "All $CLONED repositories cloned"
+    fi
+}
+
+manual_edit() {
+    local target editor="${EDITOR:-nano}"
+    section "Manual mode"
+    ask "Product mk filename (e.g. lineage_redwood.mk / spark_redwood.mk)"
+    target="$DEVICE/$ASK_REPLY"
+
+    if [[ -f "$target" ]]; then
+        ok "Found $target"
+        menu "What next?" "Open in $editor" "Exit and edit manually"
+        case $MENU_INDEX in
+            0) "$editor" "$target"; ok "File edited" ;;
+            *) info "File location: $target"; exit 0 ;;
+        esac
+    else
+        warn "$target not found"
+        menu "What next?" "Create and open in $editor" "Exit and create manually"
+        case $MENU_INDEX in
+            0) touch "$target"; "$editor" "$target"; ok "File created and edited" ;;
+            *) info "Expected location: $target"; exit 0 ;;
+        esac
+    fi
+}
+
+apply_rom() {
+    local f new_file
+    section "ROM configuration"
+    info "Applying changes for ${BOLD}$ROM${NC}"
+
+    for f in "$ANDROID_PRODUCTS" "$BOARD_CONFIG" "$LINEAGE_MK"; do
+        if [[ ! -f "$f" ]]; then
+            fail "Missing file: $f"
+            exit 1
+        fi
+    done
+
+    if [[ "$ROM" == "axion" || "$ROM" == "derpfest" ]]; then
+        warn "This ROM uses a Lineage base — keeping the lineage prefix"
+    else
+        sed -i "/device\/lineage\/sepolicy/!s/lineage/$PREFIX/g" "$ANDROID_PRODUCTS" "$BOARD_CONFIG" "$LINEAGE_MK"
+        new_file="$DEVICE/${PREFIX}_redwood.mk"
+        if [[ "$LINEAGE_MK" != "$new_file" ]]; then
+            mv "$LINEAGE_MK" "$new_file"
+            LINEAGE_MK="$new_file"
+        fi
+        ok "Product makefile is now ${BOLD}${PREFIX}_redwood.mk${NC}"
+    fi
+
+    if [[ -n "$FLAGS" ]]; then
+        printf '%s\n' "$FLAGS" >> "$LINEAGE_MK"
+        ok "Flags appended to $LINEAGE_MK"
+    fi
+
+    if [[ "$ROM" == "axion" ]]; then
+        cat >> "$SYSTEM_PROP" << 'EOF'
 
 # Axion - Scroll Optimizer
 persist.sys.perf.scroll_opt=true
 persist.sys.perf.scroll_opt.heavy_app=2
 EOF
-    success "Axion system props added."
-fi
+        ok "Axion system props added"
+    fi
 
-# ─── Infinity system props ────────────────────────────────
-if [[ "$ROM" == "infinity" ]]; then
-    info "Adding Infinity system properties..."
-    sed -i '/persist.vendor.cne.feature=1/a\
+    if [[ "$ROM" == "infinity" ]]; then
+        if grep -q 'persist.vendor.cne.feature=1' "$SYSTEM_PROP"; then
+            sed -i '/persist.vendor.cne.feature=1/a\
 \
 # Infinity\
 ro.product.marketname=Poco X5 Pro 5G\
@@ -418,12 +563,34 @@ ro.infinity.soc=Snapdragon 778G 5G\
 ro.infinity.battery=5000 mAh\
 ro.infinity.display=1080 x 2400, 120 Hz\
 ro.infinity.camera=108MP + 8MP + 2MP' "$SYSTEM_PROP"
-    success "Infinity system props added."
-fi
+            ok "Infinity system props added"
+        else
+            warn "Anchor line 'persist.vendor.cne.feature=1' not found in $SYSTEM_PROP — Infinity props NOT added"
+        fi
+    fi
+}
 
-echo ""
-echo -e "${GREEN}=====================================${NC}"
-echo -e "${GREEN}  ROM configuration completed!       ${NC}"
-echo -e "${GREEN}  You can now proceed to build.      ${NC}"
-echo -e "${GREEN}=====================================${NC}"
-echo ""
+finish() {
+    local elapsed=$((SECONDS - START_TIME))
+    box "$GREEN" "All done!" "ROM configuration completed" "You can now proceed to build." \
+        "Finished in $((elapsed / 60))m $((elapsed % 60))s"
+    printf '\n'
+}
+
+main() {
+    WORK_TMP=$(mktemp -d)
+    banner
+    step_keys
+    step_branch
+    step_rom
+    step_review
+    step_clone
+    if [[ "$ROM" == "custom_manual" ]]; then
+        manual_edit
+    else
+        apply_rom
+    fi
+    finish
+}
+
+main "$@"
